@@ -1,0 +1,18 @@
+[package]
+name = "helloglium"
+version = "0.1.0"
+authors = ["rob <rob@improbable.io>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clipboard = "0.5"
+glium = "*"
+image = "0.23"
+imgui = "*"
+imgui-glium-renderer = "*"
+imgui-winit-support = "*"
+glam = "0.8.6"
+genmesh = "0.6"
+obj = { version = "0.9", features = ["genmesh"] }
