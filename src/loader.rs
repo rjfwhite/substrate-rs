@@ -1,6 +1,7 @@
 use glium::Display;
 use glium::vertex::VertexBufferAny;
 
+
 pub fn load_wavefront(display: &Display, data: &[u8]) -> VertexBufferAny {
     #[derive(Copy, Clone)]
     struct Vertex {

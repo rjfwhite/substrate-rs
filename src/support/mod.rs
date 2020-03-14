@@ -25,10 +25,9 @@ pub fn init(title: &str) -> System {
         None => title,
     };
     let event_loop = EventLoop::new();
-    let context = glutin::ContextBuilder::new().with_vsync(true).with_multisampling(4);
+    let context = glutin::ContextBuilder::new().with_vsync(true);
     let builder = WindowBuilder::new()
         .with_title(title.to_owned())
-        .with_transparent(false)
         .with_inner_size(glutin::dpi::LogicalSize::new(1024f64, 768f64));
     let display =
         Display::new(builder, context, &event_loop).expect("Failed to initialize display");
@@ -46,28 +45,11 @@ pub fn init(title: &str) -> System {
     {
         let gl_window = display.gl_window();
         let window = gl_window.window();
-        platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Default);
+        platform.attach_window(imgui.io_mut(), &window, HiDpiMode::Rounded);
     }
 
     let hidpi_factor = platform.hidpi_factor();
     let font_size = (13.0 * hidpi_factor) as f32;
-    imgui.fonts().add_font(&[
-        FontSource::DefaultFontData {
-            config: Some(FontConfig {
-                size_pixels: font_size,
-                ..FontConfig::default()
-            }),
-        },
-        FontSource::TtfData {
-            data: include_bytes!("../../resources/fonts/Roboto-Regular.ttf"),
-            size_pixels: font_size,
-            config: Some(FontConfig {
-                rasterizer_multiply: 1.0,
-                ..FontConfig::default()
-            }),
-        },
-    ]);
-
     imgui.io_mut().font_global_scale = (1.0 / hidpi_factor) as f32;
 
     let renderer = Renderer::init(&mut imgui, &display).expect("Failed to initialize renderer");
@@ -107,15 +89,14 @@ impl System {
                 let mut ui = imgui.frame();
 
                 let mut run = true;
-
-                let gl_window = display.gl_window();
-                let mut target = display.draw();
-
-                run_ui(&mut run, &mut ui, &mut target, &display);
+                run_ui(&mut run, &mut ui);
                 if !run {
                     *control_flow = ControlFlow::Exit;
                 }
 
+                let gl_window = display.gl_window();
+                let mut target = display.draw();
+                target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
                 platform.prepare_render(&ui, gl_window.window());
                 let draw_data = ui.render();
                 renderer

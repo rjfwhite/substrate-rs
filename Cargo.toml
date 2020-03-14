@@ -8,11 +8,12 @@ edition = "2018"
 
 [dependencies]
 clipboard = "0.5"
-glium = "*"
+glium = { version = "0.26.0", default-features = true }
+winit = "0.21.0"
+imgui = "0.2.0"
+imgui-glium-renderer = "0.3.0"
+imgui-winit-support = "0.3.0"
 image = "0.23"
-imgui = "*"
-imgui-glium-renderer = "*"
-imgui-winit-support = "*"
 glam = "0.8.6"
 genmesh = "0.6"
 obj = { version = "0.9", features = ["genmesh"] }

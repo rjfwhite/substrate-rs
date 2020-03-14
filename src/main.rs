@@ -83,8 +83,6 @@ fn draw_geometry(target: &mut glium::Frame,
     params.backface_culling = BackfaceCullingMode::CullClockwise;
     params.depth.write = true;
     params.depth.test = DepthTest::IfLessOrEqual;
-    params.multisampling = true;
-    params.smooth = Some(Smooth::Nicest);
 
     let c: [f32; 3] = color.into();
 
