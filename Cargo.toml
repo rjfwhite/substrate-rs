@@ -7,13 +7,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+glium = { version = "0.25", default-features = true }
 clipboard = "0.5"
-glium = { version = "0.26.0", default-features = true }
-winit = "0.21.0"
 imgui = "0.2.0"
-imgui-glium-renderer = "0.3.0"
-imgui-winit-support = "0.3.0"
-image = "0.23"
+imgui-glium-renderer = "0.2.0"
+imgui-winit-support = "0.2.0"
+image = "0.22"
 glam = "0.8.6"
 genmesh = "0.6"
 obj = { version = "0.9", features = ["genmesh"] }
