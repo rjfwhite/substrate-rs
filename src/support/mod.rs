@@ -107,14 +107,8 @@ impl System {
 
                 let mut target = display.draw();
 
-                // let _roboto = ui.push_font(ui.fonts().fonts()[0]);
-
                 run_ui(&mut run, &mut ui, &mut target, &display);
 
-                let mut open = true;
-                ui.show_demo_window(&mut open);
-
-                // _roboto.pop(&ui);
 
                 if !run {
                     *control_flow = ControlFlow::Exit;

@@ -18,3 +18,5 @@ image = "0.22"
 glam = "0.8.6"
 genmesh = "0.6"
 obj = { version = "0.9", features = ["genmesh"] }
+physx = "0.5.1"
+rand = "*"
