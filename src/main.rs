@@ -3,65 +3,207 @@ extern crate glam;
 #[macro_use]
 extern crate glium;
 extern crate imgui;
-
-extern crate rand;
 extern crate physx;
+extern crate rand;
+#[macro_use]
+extern crate specs;
 
-const PX_PHYSICS_VERSION: u32 = physx::version(4, 1, 1);
-
-use physx::prelude::*;
+use std::borrow::{Borrow, BorrowMut};
+use std::intrinsics::transmute;
 
 use glam::*;
-use glium::{BackfaceCullingMode, Depth, DepthTest, glutin, IndexBuffer, Surface, VertexFormat, Smooth};
+use glium::{BackfaceCullingMode, Depth, DepthTest, glutin, IndexBuffer, Smooth, Surface, VertexFormat};
 use glium::PolygonMode;
 use glium::vertex::VertexBufferAny;
 use imgui::*;
 use imgui::sys::{ImGuiKey_C, ImGuiKey_DownArrow, ImGuiKey_UpArrow};
-use std::intrinsics::transmute;
+use physx::prelude::*;
 use rand::Rng;
+use specs::prelude::*;
+use physx::user_data::UserData::RigidActor;
+
+const PX_PHYSICS_VERSION: u32 = physx::version(4, 1, 1);
 
 mod camera;
 mod support;
 mod loader;
 
+struct BoxCollider(Vec3);
+
+impl Component for Transform {
+    type Storage = VecStorage<Self>;
+}
+
+struct Transform(Mat4);
+
+impl Component for BoxCollider {
+    type Storage = VecStorage<Self>;
+}
+
+struct Rigidbody(Option<BodyHandle>);
+
+impl Component for Rigidbody {
+    type Storage = VecStorage<Self>;
+}
+
+struct PhysicsSystem {
+    foundation: Foundation,
+    physics: Physics,
+    scene: Box<Scene>,
+}
+
+impl PhysicsSystem {
+    fn new() -> PhysicsSystem {
+        let mut foundation = Foundation::new(PX_PHYSICS_VERSION);
+        let mut physics = PhysicsBuilder::default()
+            .load_extensions(false)
+            .build(&mut foundation);
+
+        let mut scene = physics.create_scene(
+            SceneBuilder::default()
+                .set_gravity(Vec3::new(0.0, -9.81, 0.0))
+                .set_simulation_threading(SimulationThreadType::Dedicated(8)),
+        );
+
+        let material = physics.create_material(0.5, 0.5, 0.2);
+
+        let ground_plane = unsafe { physics.create_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, material) };
+        scene.add_actor(ground_plane);
+
+        return PhysicsSystem {
+            foundation,
+            physics,
+            scene,
+        };
+    }
+}
+
+impl<'a> System<'a> for PhysicsSystem {
+    type SystemData = (Entities<'a>,
+                       WriteStorage<'a, Transform>,
+                       ReadStorage<'a, BoxCollider>,
+                       WriteStorage<'a, Rigidbody>);
+
+    fn run(&mut self, (entities, mut transform, collider, mut rigidbody): Self::SystemData) {
+        for (e, t, c, r) in (&entities, &mut transform, &collider, &mut rigidbody).join() {
+            let rb: &mut Rigidbody = r;
+            match rb.0 {
+                Some(body) => {
+                    let model: Mat4 = self.scene.get_rigid_actor(body).expect("Yeee").get_global_pose();
+                    t.0 = model;
+                },
+                None => {
+                    let material = self.physics.create_material(0.5, 0.5, 0.2);
+                    let sphere_geo = PhysicsGeometry::from(&ColliderDesc::Box(1.0, 1.0, 1.0));
+
+                    let mut sphere_actor = unsafe {
+                        self.physics.create_dynamic(
+                            t.0,
+                            sphere_geo.as_raw(), // todo: this should take the PhysicsGeometry straight.
+                            material,
+                            10.0,
+                            Mat4::identity(),
+                        )
+                    };
+
+                    sphere_actor.set_angular_damping(0.5);
+                    let sphere_handle = self.scene.add_dynamic(sphere_actor);
+                    rb.0 = Some(sphere_handle);
+
+                    println!("MADE ENTITY");
+                }
+            }
+        }
+    }
+}
+
+struct SysA {
+    foo: i32
+}
+
+impl<'a> System<'a> for SysA {
+    // These are the resources required for execution.
+    // You can also define a struct and `#[derive(SystemData)]`,
+    // see the `full` example.
+    type SystemData = (Entities<'a>,
+                       WriteStorage<'a, Transform>,
+                       ReadStorage<'a, BoxCollider>);
+
+    fn run(&mut self, (entities, mut transform, collider): Self::SystemData) {
+        // The `.join()` combines multiple components,
+        // so we only access those entities which have
+        // both of them.
+
+        // This joins the component storages for Position
+        // and Velocity together; it's also possible to do this
+        // in parallel using rayon's `ParallelIterator`s.
+        // See `ParJoin` for more.
+        for (entity, pos, vel) in (&entities, &mut transform, &collider).join() {
+            println!("MOO {}", entity.id());
+        }
+    }
+}
+
 fn main() {
-    let mut foundation = Foundation::new(PX_PHYSICS_VERSION);
+    let mut world = World::new();
+    world.register::<Transform>();
+    world.register::<BoxCollider>();
+    world.register::<Rigidbody>();
+    let a = world.create_entity().with(Transform(Mat4::from_translation(Vec3::new(0.0,20.0,0.0)))).with(BoxCollider(Vec3::one())).with(Rigidbody(None)).build();
+    let b = world.create_entity().with(Transform(Mat4::from_translation(Vec3::new(0.0, 10.0, 0.0)))).with(BoxCollider(Vec3::one())).with(Rigidbody(None)).build();
 
-    let mut physics = PhysicsBuilder::default()
-        .load_extensions(false)
-        .build(&mut foundation);
+    let mut system = SysA { foo: 50 };
 
-    let mut scene = physics.create_scene(
-        SceneBuilder::default()
-            .set_gravity(Vec3::new(0.0, -9.81, 0.0))
-            .set_simulation_threading(SimulationThreadType::Dedicated(8)),
-    );
+    let mut dispatcher = DispatcherBuilder::new().with(SysA { foo: 900 }, "sys_a", &[]).build();
+    dispatcher.dispatch(&mut world);
 
-    let material = physics.create_material(0.5, 0.5, 0.2);
-    let ground_plane = unsafe { physics.create_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, material) };
-    scene.add_actor(ground_plane);
 
+    system.run_now(&world);
+    world.maintain();
+
+    // for (e, t, c, r) in (&entities, &mut transform, &collider, &mut rigidbody).join()
+
+    let mut physics_system = PhysicsSystem::new();
+
+    physics_system.run_now(&world);
+
+    // let mut foundation = Foundation::new(PX_PHYSICS_VERSION);
+
+    // let mut physics = PhysicsBuilder::default()
+    //     .load_extensions(false)
+    //     .build(&mut foundation);
+    //
+    // let mut scene = physics.create_scene(
+    //     SceneBuilder::default()
+    //         .set_gravity(Vec3::new(0.0, -9.81, 0.0))
+    //         .set_simulation_threading(SimulationThreadType::Dedicated(8)),
+    // );
+    //
+
+    // let ground_plane = unsafe { physics.create_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, material) };
+    // scene.add_actor(ground_plane);
+    let material = physics_system.physics.create_material(0.5, 0.5, 0.2);
     let sphere_geo = PhysicsGeometry::from(&ColliderDesc::Box(1.0, 1.0, 1.0));
 
-    let mut bodies : Vec<BodyHandle> = Vec::new();
+    let mut bodies: Vec<BodyHandle> = Vec::new();
 
     let mut gen = rand::thread_rng();
 
-    for i in 1..50 {
-        let mut sphere_actor = unsafe {
-            physics.create_dynamic(
-                Mat4::from_translation(Vec3::new(gen.gen_range(-50.0, 50.0), 20.0 + gen.gen_range(-10.0, 1000.0), gen.gen_range(-50.0, 50.0))),
-                sphere_geo.as_raw(), // todo: this should take the PhysicsGeometry straight.
-                material,
-                10.0,
-                Mat4::identity(),
-            )
-        };
-
-        sphere_actor.set_angular_damping(0.5);
-        let sphere_handle = scene.add_dynamic(sphere_actor);
-        bodies.push(sphere_handle);
-    }
+    // for i in 1..100 {
+    //     let mut sphere_actor = unsafe {
+    //         physics_system.physics.create_dynamic(
+    //             Mat4::from_translation(Vec3::new(gen.gen_range(-10.0, 10.0), 20.0 + gen.gen_range(-10.0, 100.0), gen.gen_range(-10.0, 10.0))),
+    //             sphere_geo.as_raw(), // todo: this should take the PhysicsGeometry straight.
+    //             material,
+    //             10.0,
+    //             Mat4::identity(),
+    //         )
+    //     };
+    //
+    //     sphere_actor.set_angular_damping(0.5);
+    //     let sphere_handle = physics_system.scene.add_dynamic(sphere_actor);
+    //     bodies.push(sphere_handle);
+    // }
 
     let mut system = support::init(file!());
 
@@ -83,8 +225,6 @@ fn main() {
     shadow_draw_params.backface_culling = glium::BackfaceCullingMode::CullCounterClockwise;
 
 
-
-
     // let heights_over_time = (0..100)
     //     .map(|_| {
     //         scene.simulate(0.1);
@@ -100,10 +240,6 @@ fn main() {
     //             - 10
     //      })
     //     .collect::<Vec<_>>();
-
-
-
-
 
 
     let program = glium::Program::from_source(
@@ -161,9 +297,16 @@ fn main() {
 
         camera.update_from_io(&ui.io());
 
-        scene.simulate(dt);
 
-        scene.fetch_results(true).expect("error occured during simulation");
+
+        physics_system.scene.simulate(dt);
+
+        physics_system.scene.fetch_results(true).expect("error occured during simulation");
+
+
+        physics_system.run_now(&world);
+
+
         target.clear_color_and_depth((0.01, 0.01, 0.01, 0.8), 1.0);
 
         let (width, height) = display.get_framebuffer_dimensions();
@@ -182,7 +325,7 @@ fn main() {
             shadow_target.clear_depth(1.0);
 
             for i in 0..bodies.len() {
-                let model : Mat4 = scene.get_rigid_actor(bodies[i]).expect("Yeee").get_global_pose();
+                let model: Mat4 = physics_system.scene.get_rigid_actor(bodies[i]).expect("Yeee").get_global_pose();
                 let depth_mvp = shadow_projection * shadow_view * model;
                 let uniforms = uniform! {
                     depth_mvp: depth_mvp.to_cols_array_2d(),
@@ -215,8 +358,9 @@ fn main() {
         draw_params.blend = glium::Blend::alpha_blending();
 
 
-        for i in 0..bodies.len() {
-            let pos : Mat4 = scene.get_rigid_actor(bodies[i]).expect("Yeee").get_global_pose();
+
+        for (t) in (world.read_component::<Transform>()).join() {
+            let pos : Mat4 = t.0;
 
             let bias_depth_mvp = bias_matrix * shadow_projection * shadow_view * pos;
 
@@ -244,6 +388,16 @@ fn main() {
             draw_geometry(target, &cube, projection, view, pos, Vec3::new(0.0, 1.0, 0.0), true, &program);
         }
 
+
+        // for i in 0..bodies.len() {
+        //
+        //
+        //
+        //     let pos: Mat4 = physics_system.scene.get_rigid_actor(bodies[i]).expect("Yeee").get_global_pose();
+        //
+        //
+        // }
+
         // draw_geometry(target, &cube, projection, view, floor, Vec3::new(0.1, 0.1, 0.1), false,&program);
 
         let bias_depth_mvp = bias_matrix * shadow_projection * shadow_view * floor;
@@ -270,35 +424,24 @@ fn main() {
         ).unwrap();
 
 
-
         // shadow debug
-        {
-            let uniforms = uniform! {
-                tex: glium::uniforms::Sampler::new(&shadow_texture)
-                    .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
-                    .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
-            };
-            target.clear_depth(1.0);
-            target
-                .draw(
-                    &debug_vertex_buffer,
-                    &debug_index_buffer,
-                    &image_program,
-                    &uniforms,
-                    &Default::default(),
-                )
-                .unwrap();
-        }
-
-
-
-
-
-
-
-
-
-
+        // {
+        //     let uniforms = uniform! {
+        //         tex: glium::uniforms::Sampler::new(&shadow_texture)
+        //             .magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        //             .minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+        //     };
+        //     target.clear_depth(1.0);
+        //     target
+        //         .draw(
+        //             &debug_vertex_buffer,
+        //             &debug_index_buffer,
+        //             &image_program,
+        //             &uniforms,
+        //             &Default::default(),
+        //         )
+        //         .unwrap();
+        // }
 
 
         Window::new(im_str!("Hello world"))
@@ -330,8 +473,8 @@ fn main() {
     // unsafe {
     //     scene.release();
     // }
-    drop(physics);
-    foundation.release();
+    // drop(physics_system.physics);
+    // physics_system.foundation.release();
 }
 
 fn draw_geometry(target: &mut glium::Frame,
