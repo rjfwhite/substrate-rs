@@ -78,60 +78,111 @@ pub fn init(title: &str) -> System {
         font_size,
     }
 }
-
-impl System {
-    pub fn main_loop<F: FnMut(&mut bool, &mut Ui, &mut glium::Frame, &Display) + 'static>(self, mut run_ui: F) {
-        let System {
-            event_loop,
-            display,
-            mut imgui,
-            mut platform,
-            mut renderer,
-            ..
-        } = self;
-        let mut last_frame = Instant::now();
-
-        event_loop.run(move |event, _, control_flow| match event {
-            Event::NewEvents(_) => last_frame = imgui.io_mut().update_delta_time(last_frame),
-            Event::MainEventsCleared => {
-                let gl_window = display.gl_window();
-                platform
-                    .prepare_frame(imgui.io_mut(), &gl_window.window())
-                    .expect("Failed to prepare frame");
-                gl_window.window().request_redraw();
-            }
-            Event::RedrawRequested(_) => {
-                let mut ui = imgui.frame();
-
-                let mut run = true;
-
-                let mut target = display.draw();
-
-                run_ui(&mut run, &mut ui, &mut target, &display);
-
-
-                if !run {
-                    *control_flow = ControlFlow::Exit;
-                }
-
-                let gl_window = display.gl_window();
-
-                // target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
-                platform.prepare_render(&ui, gl_window.window());
-                let draw_data = ui.render();
-                renderer
-                    .render(&mut target, draw_data)
-                    .expect("Rendering failed");
-                target.finish().expect("Failed to swap buffers");
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                ..
-            } => *control_flow = ControlFlow::Exit,
-            event => {
-                let gl_window = display.gl_window();
-                platform.handle_event(imgui.io_mut(), gl_window.window(), &event);
-            }
-        })
-    }
-}
+//
+// impl System {
+//     // pub fn main_loop<F: FnMut(&mut bool, &mut Ui, &mut glium::Frame, &Display) + 'static>( mut self, mut run_ui: F) {
+//     //     // let System {
+//     //     //     mut event_loop,
+//     //     //     display,
+//     //     //     mut imgui,
+//     //     //     mut platform,
+//     //     //     mut renderer,
+//     //     //     ..
+//     //     // } = self;
+//     //     let mut last_frame = Instant::now();
+//     //
+//     //     return;
+//     //
+//     //     use crate::glium::glutin::platform::desktop::EventLoopExtDesktop;
+//     //
+//     //         let events = self.event_loop.run_return(move |event, _, control_flow| {
+//     //             match event {
+//     //                 Event::NewEvents(_) => last_frame = self.imgui.io_mut().update_delta_time(last_frame),
+//     //                 Event::MainEventsCleared => {
+//     //                     let gl_window = self.display.gl_window();
+//     //                     self.platform
+//     //                         .prepare_frame(self.imgui.io_mut(), &gl_window.window())
+//     //                         .expect("Failed to prepare frame");
+//     //                     gl_window.window().request_redraw();
+//     //                 }
+//     //                 Event::RedrawRequested(_) => {
+//     //                     let mut ui = self.imgui.frame();
+//     //
+//     //                     let mut run = true;
+//     //
+//     //                     let mut target = self.display.draw();
+//     //
+//     //                     run_ui(&mut run, &mut ui, &mut target, (&self.display));
+//     //
+//     //
+//     //                     if !run {
+//     //                         *control_flow = ControlFlow::Exit;
+//     //                     }
+//     //
+//     //                     let gl_window = self.display.gl_window();
+//     //
+//     //                     // target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
+//     //                     self.platform.prepare_render(&ui, gl_window.window());
+//     //                     let draw_data = ui.render();
+//     //                     self.renderer
+//     //                         .render(&mut target, draw_data)
+//     //                         .expect("Rendering failed");
+//     //                     target.finish().expect("Failed to swap buffers");
+//     //                 }
+//     //                 Event::WindowEvent {
+//     //                     event: WindowEvent::CloseRequested,
+//     //                     ..
+//     //                 } => *control_flow = ControlFlow::Exit,
+//     //                 event => {
+//     //                     let gl_window = self.display.gl_window();
+//     //                     self.platform.handle_event(self.imgui.io_mut(), gl_window.window(), &event);
+//     //                 }
+//     //             }
+//     //             *control_flow = ControlFlow::Exit;
+//     //         }
+//     //         );
+//
+//         // event_loop.run(move |event, _, control_flow| match event {
+//         //     Event::NewEvents(_) => last_frame = imgui.io_mut().update_delta_time(last_frame),
+//         //     Event::MainEventsCleared => {
+//         //         let gl_window = display.gl_window();
+//         //         platform
+//         //             .prepare_frame(imgui.io_mut(), &gl_window.window())
+//         //             .expect("Failed to prepare frame");
+//         //         gl_window.window().request_redraw();
+//         //     }
+//         //     Event::RedrawRequested(_) => {
+//         //         let mut ui = imgui.frame();
+//         //
+//         //         let mut run = true;
+//         //
+//         //         let mut target = display.draw();
+//         //
+//         //         run_ui(&mut run, &mut ui, &mut target, &display);
+//         //
+//         //
+//         //         if !run {
+//         //             *control_flow = ControlFlow::Exit;
+//         //         }
+//         //
+//         //         let gl_window = display.gl_window();
+//         //
+//         //         // target.clear_color_srgb(1.0, 1.0, 1.0, 1.0);
+//         //         platform.prepare_render(&ui, gl_window.window());
+//         //         let draw_data = ui.render();
+//         //         renderer
+//         //             .render(&mut target, draw_data)
+//         //             .expect("Rendering failed");
+//         //         target.finish().expect("Failed to swap buffers");
+//         //     }
+//         //     Event::WindowEvent {
+//         //         event: WindowEvent::CloseRequested,
+//         //         ..
+//         //     } => *control_flow = ControlFlow::Exit,
+//         //     event => {
+//         //         let gl_window = display.gl_window();
+//         //         platform.handle_event(imgui.io_mut(), gl_window.window(), &event);
+//         //     }
+//         // })
+//     }
+// }

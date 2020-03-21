@@ -2,6 +2,9 @@ use glam::*;
 use specs::{Component, VecStorage};
 use physx::prelude::BodyHandle;
 
+#[derive(Default)]
+pub struct DeltaTime(pub f32);
+
 pub struct BoxCollider(pub Vec3);
 
 impl Component for Transform {

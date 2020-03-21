@@ -1,6 +1,7 @@
-use physx::prelude::*;
 use glam::*;
+use physx::prelude::*;
 use specs::prelude::*;
+
 use crate::common::*;
 
 const PX_PHYSICS_VERSION: u32 = physx::version(4, 1, 1);
@@ -38,19 +39,25 @@ impl PhysicsSystem {
 }
 
 impl<'a> System<'a> for PhysicsSystem {
-    type SystemData = (Entities<'a>,
+    type SystemData = (Read<'a, DeltaTime>,
+                       Entities<'a>,
                        WriteStorage<'a, Transform>,
                        ReadStorage<'a, BoxCollider>,
                        WriteStorage<'a, Rigidbody>);
 
-    fn run(&mut self, (entities, mut transform, collider, mut rigidbody): Self::SystemData) {
+    fn run(&mut self, (dt, entities, mut transform, collider, mut rigidbody): Self::SystemData) {
+
+        self.scene.simulate(dt.0);
+        self.scene.fetch_results(true).expect("error occured during simulation");
+
         for (e, t, c, r) in (&entities, &mut transform, &collider, &mut rigidbody).join() {
             let rb: &mut Rigidbody = r;
+
             match rb.0 {
                 Some(body) => {
                     let model: Mat4 = self.scene.get_rigid_actor(body).expect("Yeee").get_global_pose();
                     t.0 = model;
-                },
+                }
                 None => {
                     let material = self.physics.create_material(0.5, 0.5, 0.2);
                     let sphere_geo = PhysicsGeometry::from(&ColliderDesc::Box(1.0, 1.0, 1.0));

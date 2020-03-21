@@ -4,6 +4,7 @@ uniform sampler2DShadow shadow_map;
 uniform vec3 light_loc;
 uniform vec3 paint;
 
+in float camera_distance;
 in vec4 shadow_coord;
 in vec4 model_normal;
 
@@ -35,5 +36,7 @@ void main() {
         visibility = 1.0 - shadow;
     }
 
-    color = vec4(max(lum * visibility, 0.05) * paint * light_color, 1.0);
+//    float fog = max(camera_distance / 100.0, 1.0);
+    float fog = 0.0;
+    color = vec4(mix(max(lum * visibility, 0.05) * paint * light_color, vec3(0.0, 0.1, 0.1), fog), 1.0);
 }
