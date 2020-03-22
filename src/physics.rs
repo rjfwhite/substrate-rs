@@ -3,6 +3,7 @@ use physx::prelude::*;
 use specs::prelude::*;
 
 use crate::common::*;
+use stopwatch::Stopwatch;
 
 const PX_PHYSICS_VERSION: u32 = physx::version(4, 1, 1);
 
@@ -47,6 +48,8 @@ impl<'a> System<'a> for PhysicsSystem {
 
     fn run(&mut self, (dt, entities, mut transform, collider, mut rigidbody): Self::SystemData) {
 
+        let sw = Stopwatch::start_new();
+
         self.scene.simulate(dt.0);
         self.scene.fetch_results(true).expect("error occured during simulation");
 
@@ -78,5 +81,7 @@ impl<'a> System<'a> for PhysicsSystem {
                 }
             }
         }
+
+        println!("Physics took {}ms", sw.elapsed_ms());
     }
 }

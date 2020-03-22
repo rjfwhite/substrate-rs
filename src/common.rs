@@ -7,6 +7,12 @@ pub struct DeltaTime(pub f32);
 
 pub struct BoxCollider(pub Vec3);
 
+pub struct PlaneCollider(pub Vec2);
+
+impl Component for PlaneCollider {
+    type Storage = VecStorage<Self>;
+}
+
 impl Component for Transform {
     type Storage = VecStorage<Self>;
 }

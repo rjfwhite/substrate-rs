@@ -43,7 +43,7 @@ impl Camera {
             glam::Vec2::zero()
         };
 
-        let speed = if io.key_shift { 30.0 } else { 10.0 };
+        let speed = if io.key_shift { 60.0 } else { 10.0 };
         let translation_x = if a { -1.0 } else if d { 1.0 } else { 0.0 };
         let translation_y = if w { 1.0 } else if s { -1.0 } else { 0.0 };
 

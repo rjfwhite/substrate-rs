@@ -8,15 +8,22 @@ use winit::platform::desktop::EventLoopExtDesktop;
 
 use crate::common::*;
 use crate::{loader, colors};
+use rand::Rng;
+use stopwatch::Stopwatch;
 
 pub struct RenderingSystem<'a> {
     system: crate::support::System,
     camera: crate::camera::Camera,
     diffuse_program: Program,
+    instanced_diffuse_program: Program,
     shadow_diffuse_program: Program,
+    instanced_shadow_diffuse_program: Program,
     shadow_program: Program,
+    instanced_shadow_program: Program,
     image_program: Program,
+    solid_program: Program,
     cube: VertexBufferAny,
+    plane: VertexBufferAny,
     shadow_texture: glium::texture::DepthTexture2d,
     shadow_draw_params: glium::draw_parameters::DrawParameters<'a>,
     shadow_projection: Mat4,
@@ -35,10 +42,24 @@ impl<'a> RenderingSystem<'a> {
             None,
         ).unwrap();
 
+        let instanced_diffuse_program = glium::Program::from_source(
+            &system.display,
+            include_str!("../resources/shaders/diffuse-instanced.vert.glsl"),
+            include_str!("../resources/shaders/diffuse-instanced.frag.glsl"),
+            None,
+        ).unwrap();
+
         let shadow_diffuse_program = glium::Program::from_source(
             &system.display,
             include_str!("../resources/shaders/diffuse-shadow.vert.glsl"),
             include_str!("../resources/shaders/diffuse-shadow.frag.glsl"),
+            None,
+        ).unwrap();
+
+        let instanced_shadow_diffuse_program = glium::Program::from_source(
+            &system.display,
+            include_str!("../resources/shaders/diffuse-shadow-instanced.vert.glsl"),
+            include_str!("../resources/shaders/diffuse-shadow-instanced.frag.glsl"),
             None,
         ).unwrap();
 
@@ -49,6 +70,13 @@ impl<'a> RenderingSystem<'a> {
             None,
         ).unwrap();
 
+        let instanced_shadow_program = glium::Program::from_source(
+            &system.display,
+            include_str!("../resources/shaders/shadow-instanced.vert.glsl"),
+            include_str!("../resources/shaders/shadow-instanced.frag.glsl"),
+            None,
+        ).unwrap();
+
         let image_program = glium::Program::from_source(
             &system.display,
             include_str!("../resources/shaders/image.vert.glsl"),
@@ -56,11 +84,18 @@ impl<'a> RenderingSystem<'a> {
             None,
         ).unwrap();
 
+        let solid_program = glium::Program::from_source(
+            &system.display,
+            include_str!("../resources/shaders/solid.vert.glsl"),
+            include_str!("../resources/shaders/solid.frag.glsl"),
+            None,
+        ).unwrap();
+
         let light_loc = [0.4, 1.0, 0.7];
-        let shadow_map_size = 2048;
+        let shadow_map_size = 10000;
         let shadow_texture = glium::texture::DepthTexture2d::empty(&system.display, shadow_map_size, shadow_map_size).unwrap();
-        let w = 50.0;
-        let shadow_projection = Mat4::orthographic_rh_gl(-w, w, -w, w, -50.0, 100.0);
+        let w = 100.0;
+        let shadow_projection = Mat4::orthographic_rh_gl(-w, w, -w, w, -200.0, 600.0);
         let shadow_view = Mat4::look_at_rh(light_loc.into(), Vec3::zero(), Vec3::unit_y());
 
         let mut shadow_draw_params: glium::draw_parameters::DrawParameters = Default::default();
@@ -72,15 +107,21 @@ impl<'a> RenderingSystem<'a> {
         shadow_draw_params.backface_culling = glium::BackfaceCullingMode::CullCounterClockwise;
 
         let cube = loader::load_wavefront(&system.display, include_bytes!("../resources/models/cube.obj"));
+        let plane = loader::load_wavefront(&system.display, include_bytes!("../resources/models/plane.obj"));
 
         RenderingSystem {
             system,
             camera: crate::camera::Camera::new(Vec3::zero()),
             diffuse_program,
+            instanced_diffuse_program,
             shadow_diffuse_program,
+            instanced_shadow_diffuse_program,
             shadow_program,
+            instanced_shadow_program,
             image_program,
+            solid_program,
             cube,
+            plane,
             shadow_texture,
             shadow_draw_params,
             shadow_projection,
@@ -88,70 +129,79 @@ impl<'a> RenderingSystem<'a> {
             light_loc: light_loc.into(),
         }
     }
-    //
-    // fn draw_geometry(target: &mut glium::Frame,
-    //                  vertex_buffer: &VertexBufferAny,
-    //                  projection: Mat4,
-    //                  view: Mat4,
-    //                  model: Mat4,
-    //                  color: Vec3,
-    //                  wireframe: bool,
-    //                  program: &glium::Program) {
-    //     let indices = glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList);
-    //
-    //     let mut params = glium::DrawParameters::default();
-    //     params.line_width = Option::Some(3.0);
-    //     params.polygon_mode = PolygonMode::Fill;
-    //     params.backface_culling = BackfaceCullingMode::CullClockwise;
-    //     params.depth.write = true;
-    //     params.depth.test = DepthTest::IfLessOrEqual;
-    //
-    //     let c: [f32; 3] = color.into();
-    //
-    //     if !wireframe {
-    //         target.draw(vertex_buffer, &indices, program, &uniform! {
-    //          projection: projection.to_cols_array_2d(),
-    //          view: view.to_cols_array_2d(),
-    //          model: model.to_cols_array_2d(),
-    //          paint:c
-    //     }, &params).unwrap();
-    //     }
-    //
-    //     if wireframe {
-    //         params.polygon_mode = PolygonMode::Line;
-    //         params.depth.test = DepthTest::IfLessOrEqual;
-    //
-    //         target.draw(vertex_buffer, &indices, program, &uniform! {
-    //          projection: projection.to_cols_array_2d(),
-    //          view: view.to_cols_array_2d(),
-    //          model: model.to_cols_array_2d(),
-    //          paint: [0.0, 0.0, 0.0f32]
-    //     }, &params).unwrap();
-    //     }
-    // }
-
-    fn draw_shadow<'b> (&self, transforms: &ReadStorage<'b, Transform>, colliders: &ReadStorage<'b, BoxCollider>) {
+    fn draw_shadow<'b> (&self, transforms: &ReadStorage<'b, Transform>,
+                        boxes: &ReadStorage<'b, BoxCollider>,
+                        planes: &ReadStorage<'b, PlaneCollider>) {
         let mut shadow_target = glium::framebuffer::SimpleFrameBuffer::depth_only(&self.system.display, &self.shadow_texture).unwrap();
         shadow_target.clear_color(1.0, 1.0, 1.0, 1.0);
         shadow_target.clear_depth(1.0);
 
-        for (transform, collider) in (transforms, colliders).join() {
-            let model: Mat4 = transform.0 * Mat4::from_scale(collider.0);
-            let depth_mvp = self.shadow_projection * self.shadow_view * model;
+        let mut box_transforms : Vec<Mat4> = Vec::new();
+
+        for (transform, boxc) in (transforms, boxes).join() {
+
+            let model: Mat4 = transform.0 * Mat4::from_scale(boxc.0);
+
+            box_transforms.push(model);
+            //
+            // let depth_mvp = self.shadow_projection * self.shadow_view * model;
+            // let uniforms = uniform! {
+            //         projection: self.shadow_projection.to_cols_array_2d(),
+            //         view: self.shadow_view.to_cols_array_2d(),
+            //         model: model.to_cols_array_2d(),
+            //     };
+            // shadow_target.draw(
+            //     &self.cube,
+            //     &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            //     &self.shadow_program,
+            //     &uniforms,
+            //     &self.shadow_draw_params,
+            // ).unwrap();
+        }
+
+
+        let mut per_instance = {
+            #[derive(Copy, Clone)]
+            struct Attr {
+                model: [[f32;4];4]
+            }
+
+            implement_vertex!(Attr, model);
+
+            let data = box_transforms.iter().map(|model| {
+                Attr {
+                    model: model.to_cols_array_2d()
+                }
+            }).collect::<Vec<_>>();
+
+            glium::vertex::VertexBuffer::dynamic(&self.system.display, &data).unwrap()
+        };
+
+
+        {
             let uniforms = uniform! {
-                    depth_mvp: depth_mvp.to_cols_array_2d(),
+                    projection: self.shadow_projection.to_cols_array_2d(),
+                    view: self.shadow_view.to_cols_array_2d(),
                 };
+
             shadow_target.draw(
-                &self.cube,
+                (&self.cube, per_instance.per_instance().unwrap()),
                 &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-                &self.shadow_program,
+                &self.instanced_shadow_program,
                 &uniforms,
                 &self.shadow_draw_params,
             ).unwrap();
+
+
         }
+
+
+
     }
 
-    fn draw_geometry<'b> (&self, target : &mut glium::Frame, transforms: &ReadStorage<'b, Transform>, colliders: &ReadStorage<'b, BoxCollider>) {
+    fn draw_geometry<'b> (&self, target : &mut glium::Frame, transforms: &ReadStorage<'b, Transform>,
+                          boxes: &ReadStorage<'b, BoxCollider>,
+                          planes: &ReadStorage<'b, PlaneCollider>) {
         let aspect_ratio = {
             let (width, height) = self.system.display.get_framebuffer_dimensions();
             width as f32 / height as f32
@@ -175,15 +225,175 @@ impl<'a> RenderingSystem<'a> {
         draw_params.backface_culling = glium::BackfaceCullingMode::CullClockwise;
         draw_params.blend = glium::Blend::alpha_blending();
 
-        for (transform, collider) in (transforms, colliders).join() {
-            let pos: Mat4 = transform.0 * Mat4::from_scale(collider.0);
-            let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
-            let uniforms = uniform! {
+        let mut box_transforms : Vec<Mat4> = Vec::new();
+
+        for (transform, boxc) in (transforms, boxes).join() {
+            let pos: Mat4 = transform.0 * Mat4::from_scale(boxc.0);
+
+            let mut transformed = projection * view * (transform.0 * Vec4::new(0.0,0.0,0.0,1.0));
+            transformed /= transformed.w();
+
+            if transformed.z() > -0.1 && transformed.x()> -1.1 && transformed.x() < 1.1 && transformed.y()> -1.1 && transformed.y() < 1.1 {
+                box_transforms.push(pos);
+            }
+
+
+
+
+            //
+            // {
+            //     let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
+            //     let uniforms = uniform! {
+            //         light_loc: [self.light_loc.x(), self.light_loc.y(), self.light_loc.z()],
+            //         projection: projection.to_cols_array_2d(),
+            //         view: view.to_cols_array_2d(),
+            //         model: pos.to_cols_array_2d(),
+            //         paint: [1.0, 0.0, 0.0f32],
+            //         depth_bias_mvp: bias_depth_mvp.to_cols_array_2d(),
+            //         shadow_map: glium::uniforms::Sampler::new(&self.shadow_texture)
+        	// 			.magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        	// 			.minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+            //             .depth_texture_comparison(Some(glium::uniforms::DepthTextureComparison::LessOrEqual)),
+            //     };
+            //
+            //
+            //     target.draw(
+            //         &self.cube,
+            //         &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            //         &self.shadow_diffuse_program,
+            //         &uniforms,
+            //         &draw_params,
+            //     ).unwrap();
+            // }
+            //
+            // {
+            //     let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
+            //     let uniforms = uniform! {
+            //         projection: projection.to_cols_array_2d(),
+            //         view: view.to_cols_array_2d(),
+            //         model: pos.to_cols_array_2d(),
+            //         paint: [0.0, 0.0, 0.0f32]
+            //     };
+            //
+            //     draw_params.polygon_mode = PolygonMode::Point;
+            //     draw_params.point_size = Some(2.0);
+            //
+            //     target.draw(
+            //         &self.cube,
+            //         &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            //         &self.shadow_diffuse_program,
+            //         &uniforms,
+            //         &draw_params,
+            //     ).unwrap();
+            //
+            //     draw_params.polygon_mode = PolygonMode::Fill;
+            // }
+            //
+            // {
+            //     let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
+            //     let uniforms = uniform! {
+            //         projection: projection.to_cols_array_2d(),
+            //         view: view.to_cols_array_2d(),
+            //         model: pos.to_cols_array_2d(),
+            //         paint: [0.0, 0.0, 0.0f32]
+            //     };
+            //
+            //     draw_params.polygon_mode = PolygonMode::Line;
+            //     draw_params.line_width = Some(2.0);
+            //
+            //     target.draw(
+            //         &self.cube,
+            //         &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+            //         &self.shadow_diffuse_program,
+            //         &uniforms,
+            //         &draw_params,
+            //     ).unwrap();
+            //
+            //     draw_params.polygon_mode = PolygonMode::Fill;
+            // }
+
+        }
+
+        for (transform, plane) in (transforms, planes).join() {
+
+            let pos: Mat4 = transform.0 * Mat4::from_scale(Vec3::new(plane.0.x(), 1.0, plane.0.y()));
+            {
+
+                let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
+                let uniforms = uniform! {
                     light_loc: [self.light_loc.x(), self.light_loc.y(), self.light_loc.z()],
                     projection: projection.to_cols_array_2d(),
                     view: view.to_cols_array_2d(),
                     model: pos.to_cols_array_2d(),
-                    paint: [1.0, 0.0, 0.0f32],
+                    paint: [0.0, 1.0, 0.0f32],
+                    depth_bias_mvp: bias_depth_mvp.to_cols_array_2d(),
+                    shadow_map: glium::uniforms::Sampler::new(&self.shadow_texture)
+        				.magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
+        				.minify_filter(glium::uniforms::MinifySamplerFilter::Nearest)
+                        .depth_texture_comparison(Some(glium::uniforms::DepthTextureComparison::LessOrEqual)),
+                };
+
+                target.draw(
+                    &self.plane,
+                    &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+                    &self.shadow_diffuse_program,
+                    &uniforms,
+                    &draw_params,
+                ).unwrap();
+            }
+
+            {
+                let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view * pos;
+                let uniforms = uniform! {
+                    projection: projection.to_cols_array_2d(),
+                    view: view.to_cols_array_2d(),
+                    model: pos.to_cols_array_2d(),
+                    paint: [0.0, 0.0, 0.0f32]
+                };
+
+                draw_params.polygon_mode = PolygonMode::Line;
+                draw_params.line_width = Some(2.0);
+
+                target.draw(
+                    &self.plane,
+                    &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+                    &self.shadow_diffuse_program,
+                    &uniforms,
+                    &draw_params,
+                ).unwrap();
+
+                draw_params.polygon_mode = PolygonMode::Fill;
+            }
+
+        }
+
+        let mut randy = rand::thread_rng();
+
+        let mut per_instance = {
+            #[derive(Copy, Clone)]
+            struct Attr {
+                model: [[f32;4];4]
+            }
+
+            implement_vertex!(Attr, model);
+
+            let data = box_transforms.iter().map(|model| {
+                Attr {
+                    model: model.to_cols_array_2d()
+                }
+            }).collect::<Vec<_>>();
+
+            glium::vertex::VertexBuffer::dynamic(&self.system.display, &data).unwrap()
+        };
+
+
+        {
+            let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view;
+            let uniforms = uniform! {
+                    light_loc: [self.light_loc.x(), self.light_loc.y(), self.light_loc.z()],
+                    projection: projection.to_cols_array_2d(),
+                    view: view.to_cols_array_2d(),
+                    paint: [0.0, 1.0, 0.0f32],
                     depth_bias_mvp: bias_depth_mvp.to_cols_array_2d(),
                     shadow_map: glium::uniforms::Sampler::new(&self.shadow_texture)
         				.magnify_filter(glium::uniforms::MagnifySamplerFilter::Nearest)
@@ -192,13 +402,38 @@ impl<'a> RenderingSystem<'a> {
                 };
 
             target.draw(
-                &self.cube,
+                (&self.cube, per_instance.per_instance().unwrap()),
                 &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-                &self.shadow_diffuse_program,
+                &self.instanced_shadow_diffuse_program,
                 &uniforms,
                 &draw_params,
             ).unwrap();
+
+
         }
+
+        {
+            let uniforms = uniform! {
+                    projection: projection.to_cols_array_2d(),
+                    view: view.to_cols_array_2d(),
+                    paint: [0.0, 0.0, 0.0f32],
+                };
+
+            draw_params.polygon_mode = PolygonMode::Line;
+            target.draw(
+                (&self.cube, per_instance.per_instance().unwrap()),
+                &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
+                &self.instanced_diffuse_program,
+                &uniforms,
+                &draw_params,
+            ).unwrap();
+            draw_params.polygon_mode = PolygonMode::Fill;
+
+
+        }
+
+
+
     }
 
     fn draw_debug_shadow_map(&self, target: &mut glium::Frame) {
@@ -237,10 +472,16 @@ impl<'a> RenderingSystem<'a> {
 impl<'a> System<'a> for RenderingSystem<'_> {
     type SystemData = (Read<'a, DeltaTime>,
                        ReadStorage<'a, Transform>,
-                       ReadStorage<'a, BoxCollider>);
+                       ReadStorage<'a, BoxCollider>,
+                        ReadStorage<'a, PlaneCollider>);
 
-    fn run(&mut self, (dt, transforms, colliders): Self::SystemData) {
+    fn run(&mut self, (dt, transforms, boxes, planes): Self::SystemData) {
+
+        let sw = Stopwatch::start_new();
+
         {
+
+
             let display = &self.system.display;
             let imgui = &mut self.system.imgui;
             let platform = &mut self.system.platform;
@@ -256,15 +497,17 @@ impl<'a> System<'a> for RenderingSystem<'_> {
 
                 *control_flow = ControlFlow::Exit;
             });
+
+
         }
 
         self.camera.update_from_io(self.system.imgui.io());
 
         let mut target = self.system.display.draw();
-        target.clear_color_and_depth((0.0, 0.0, 0.0, 0.0), 1.0);
+        target.clear_color_and_depth((0.01, 0.01, 0.01, 1.0), 1.0);
 
-        self.draw_shadow(&transforms, &colliders);
-        self.draw_geometry(&mut target, &transforms, &colliders);
+        self.draw_shadow(&transforms, &boxes, &planes);
+        self.draw_geometry(&mut target, &transforms, &boxes, &planes);
 
         let mut ui = self.system.imgui.frame();
 
@@ -297,12 +540,15 @@ impl<'a> System<'a> for RenderingSystem<'_> {
         }
 
         let gl_window = self.system.display.gl_window();
+
         self.system.platform.prepare_render(&ui, gl_window.window());
         let draw_data = ui.render();
         self.system.renderer
             .render(&mut target, draw_data)
             .expect("Rendering failed");
         target.finish().expect("Failed to swap buffers");
+
+        println!("Rendering took {}ms", sw.elapsed_ms());
     }
 }
 

@@ -26,21 +26,20 @@ fn main() {
     world.register::<Transform>();
     world.register::<BoxCollider>();
     world.register::<Rigidbody>();
-
-
+    world.register::<PlaneCollider>();
 
     let mut randy = rand::thread_rng();
 
-    for _ in 1..1000 {
+    for _ in 1..2000 {
         world.create_entity()
-            .with(Transform(Mat4::from_translation(Vec3::new(randy.gen_range(-60.0, 60.0), randy.gen_range(20.0, 1000.0), randy.gen_range(-60.0, 60.0)))))
+            .with(Transform(Mat4::from_translation(Vec3::new(randy.gen_range(-200.0, 200.0), randy.gen_range(20.0, 1000.0), randy.gen_range(-200.0, 200.0)))))
             .with(BoxCollider(Vec3::new(1.0, 1.0, 1.0)))
             .with(Rigidbody(None)).build();
     }
 
     world.create_entity()
-        .with(Transform(Mat4::from_translation(Vec3::unit_y() * -10.0)))
-        .with(BoxCollider(Vec3::new(100.0, 10.0, 100.0))).build();
+        .with(Transform(Mat4::from_translation(Vec3::zero())))
+        .with(PlaneCollider(Vec2::new(1000.0,  1000.0))).build();
 
     world.insert(DeltaTime(0.0));
 

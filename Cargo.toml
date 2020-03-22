@@ -21,3 +21,4 @@ obj = { version = "0.9", features = ["genmesh"] }
 physx = "0.5.1"
 rand = "0.7.3"
 specs = "0.16.1"
+stopwatch = "0.0.7"

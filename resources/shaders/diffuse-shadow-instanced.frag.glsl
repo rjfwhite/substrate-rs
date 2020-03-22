@@ -37,7 +37,7 @@ void main() {
     }
 
     float fog = 1.0 - exp(-(camera_distance / 500.0));
-//    float fog = 0.0;
+    //    float fog = 0.0;
     color = vec4(mix(max(lum * visibility, 0.05) * paint * light_color, vec3(0.01, 0.01, 0.01), fog), 1.0);
 
 }

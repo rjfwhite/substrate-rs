@@ -1,17 +1,18 @@
 use glium::Display;
 use glium::vertex::VertexBufferAny;
+use genmesh::{MapToVertices, EmitTriangles};
+
+#[derive(Copy, Clone)]
+struct Vertex {
+    position: [f32; 3],
+    normal: [f32; 3],
+    texture: [f32; 2],
+}
+
+implement_vertex!(Vertex, position, normal, texture);
 
 
 pub fn load_wavefront(display: &Display, data: &[u8]) -> VertexBufferAny {
-    #[derive(Copy, Clone)]
-    struct Vertex {
-        position: [f32; 3],
-        normal: [f32; 3],
-        texture: [f32; 2],
-    }
-
-    implement_vertex!(Vertex, position, normal, texture);
-
     let mut data = ::std::io::BufReader::new(data);
     let data = obj::Obj::load_buf(&mut data).unwrap();
 
