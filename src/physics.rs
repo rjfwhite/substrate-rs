@@ -26,6 +26,23 @@ impl PhysicsSystem {
                 .set_simulation_threading(SimulationThreadType::Dedicated(8)),
         );
 
+        use physx_sys::*;
+
+        // unsafe {
+        //     let mut cooking : Cooking = physx::cooking::Cooking::new(PX_PHYSICS_VERSION, &mut foundation, PxCookingParams_new(&PxTolerancesScale_new_1()));
+        //
+        //
+        //     PxTriangleMeshDesc {
+        //         points: PxBoundedData {},
+        //         triangles: PxBoundedData {},
+        //         flags: PxMeshFlags {},
+        //         structgen_pad0: [],
+        //         materialIndices: PxTypedStridedData_physx_PxMaterialTableIndex_ {}
+        //     }
+        //
+        //     cooking.create_triangle_mesh();
+        // }
+
         let material = physics.create_material(0.5, 0.5, 0.2);
 
         let ground_plane = unsafe { physics.create_plane(Vec3::new(0.0, 1.0, 0.0), 0.0, material) };

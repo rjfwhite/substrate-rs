@@ -30,7 +30,8 @@ fn main() {
 
     let mut randy = rand::thread_rng();
 
-    for _ in 1..2000 {
+    for _ in 1..10000 {
+
         world.create_entity()
             .with(Transform(Mat4::from_translation(Vec3::new(randy.gen_range(-200.0, 200.0), randy.gen_range(20.0, 1000.0), randy.gen_range(-200.0, 200.0)))))
             .with(BoxCollider(Vec3::new(1.0, 1.0, 1.0)))
@@ -60,9 +61,6 @@ fn main() {
         } else {
             std::time::Duration::from_secs_f32(frame_time)
         };
-
-
-        // std::thread::sleep(sleep_duration);
     }
 }
 
