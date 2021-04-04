@@ -27,19 +27,21 @@ fn main() {
     world.register::<BoxCollider>();
     world.register::<Rigidbody>();
     world.register::<PlaneCollider>();
+    world.register::<MeshRenderer>();
 
     let mut randy = rand::thread_rng();
 
     for _ in 1..10000 {
-
         world.create_entity()
             .with(Transform(Mat4::from_translation(Vec3::new(randy.gen_range(-200.0, 200.0), randy.gen_range(20.0, 1000.0), randy.gen_range(-200.0, 200.0)))))
             .with(BoxCollider(Vec3::new(1.0, 1.0, 1.0)))
+            .with(MeshRenderer(Mesh::Cube))
             .with(Rigidbody(None)).build();
     }
 
     world.create_entity()
-        .with(Transform(Mat4::from_translation(Vec3::zero())))
+        .with(Transform(Mat4::from_translation(Vec3::zero()) * Mat4::from_scale(Vec3::new(1000.0, 1.0, 1000.0))))
+        .with(MeshRenderer(Mesh::Plane))
         .with(PlaneCollider(Vec2::new(1000.0,  1000.0))).build();
 
     world.insert(DeltaTime(0.0));
