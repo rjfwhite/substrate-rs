@@ -13,6 +13,7 @@ use winit::platform::desktop::EventLoopExtDesktop;
 
 use crate::{colors, loader};
 use crate::common::*;
+use glium::framebuffer::SimpleFrameBuffer;
 
 pub struct RenderingSystem<'a> {
     system: crate::support::System,
@@ -136,8 +137,7 @@ impl<'a> RenderingSystem<'a> {
         }
     }
 
-    fn draw_shadow<'b>(&self, transforms: &ReadStorage<'b, Transform>, mesh_renderers: &ReadStorage<'b, MeshRenderer>) {
-
+    fn draw_mesh_shadows<'b>(&self, transforms: &ReadStorage<'b, Transform>, mesh_renderers: &ReadStorage<'b, MeshRenderer>) {
         let mut shadow_target = glium::framebuffer::SimpleFrameBuffer::depth_only(&self.system.display, &self.shadow_texture).unwrap();
         shadow_target.clear_color(1.0, 1.0, 1.0, 1.0);
         shadow_target.clear_depth(1.0);
@@ -157,21 +157,18 @@ impl<'a> RenderingSystem<'a> {
         let box_transform_buffer = self.make_instance_buffer(&box_transforms);
         let sphere_transform_buffer = self.make_instance_buffer(&sphere_transforms);
 
+        self.draw_instanced_mesh_shadow(&mut shadow_target, &self.cube, &box_transform_buffer);
+        self.draw_instanced_mesh_shadow(&mut shadow_target, &self.sphere, &sphere_transform_buffer);
+    }
+
+    fn draw_instanced_mesh_shadow(&self, shadow_target: &mut SimpleFrameBuffer, mesh: &VertexBufferAny, instances: &VertexBufferAny) {
         let uniforms = uniform! {
             projection: self.shadow_projection.to_cols_array_2d(),
             view: self.shadow_view.to_cols_array_2d(),
         };
 
         shadow_target.draw(
-            (&self.cube, box_transform_buffer.per_instance().unwrap()),
-            &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.instanced_shadow_program,
-            &uniforms,
-            &self.shadow_draw_params,
-        ).unwrap();
-
-        shadow_target.draw(
-            (&self.sphere, sphere_transform_buffer.per_instance().unwrap()),
+            (mesh, instances.per_instance().unwrap()),
             &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.instanced_shadow_program,
             &uniforms,
@@ -179,8 +176,33 @@ impl<'a> RenderingSystem<'a> {
         ).unwrap();
     }
 
-    fn draw_geometry<'b>(&self, target: &mut glium::Frame, transforms: &ReadStorage<'b, Transform>, mesh_renderers: &ReadStorage<'b, MeshRenderer>) {
+    fn draw_meshes<'b>(&self, target: &mut glium::Frame, transforms: &ReadStorage<'b, Transform>, mesh_renderers: &ReadStorage<'b, MeshRenderer>) {
+        let mut cube_transforms: Vec<Mat4> = Vec::new();
+        let mut sphere_transforms: Vec<Mat4> = Vec::new();
+        let mut plane_transforms: Vec<Mat4> = Vec::new();
 
+        for (transform, mesh_renderer) in (transforms, mesh_renderers).join() {
+            match mesh_renderer.0 {
+                Mesh::Cube => cube_transforms.push(transform.0),
+                Mesh::Sphere => sphere_transforms.push(transform.0),
+                Mesh::Plane => plane_transforms.push(transform.0),
+            }
+        }
+
+        let cube_transform_buffer = self.make_instance_buffer(&cube_transforms);
+        let sphere_transform_buffer = self.make_instance_buffer(&sphere_transforms);
+        let plane_transform_buffer = self.make_instance_buffer(&plane_transforms);
+
+        self.draw_instanced_mesh(target, &self.cube, &cube_transform_buffer);
+        self.draw_instanced_mesh(target, &self.sphere, &sphere_transform_buffer);
+        self.draw_instanced_mesh(target, &self.plane, &plane_transform_buffer);
+
+        self.draw_instanced_mesh_outline(target, &self.cube, &cube_transform_buffer);
+        self.draw_instanced_mesh_outline(target, &self.sphere, &sphere_transform_buffer);
+        self.draw_instanced_mesh_outline(target, &self.plane, &plane_transform_buffer);
+    }
+
+    fn draw_instanced_mesh(&self, target: &mut glium::Frame, mesh: &VertexBufferAny, instances: &VertexBufferAny) {
         let aspect_ratio = {
             let (width, height) = self.system.display.get_framebuffer_dimensions();
             width as f32 / height as f32
@@ -204,22 +226,6 @@ impl<'a> RenderingSystem<'a> {
         draw_params.backface_culling = glium::BackfaceCullingMode::CullClockwise;
         draw_params.blend = glium::Blend::alpha_blending();
 
-        let mut cube_transforms: Vec<Mat4> = Vec::new();
-        let mut sphere_transforms: Vec<Mat4> = Vec::new();
-        let mut plane_transforms: Vec<Mat4> = Vec::new();
-
-        for (transform, mesh_renderer) in (transforms, mesh_renderers).join() {
-            match mesh_renderer.0 {
-                Mesh::Cube => cube_transforms.push(transform.0),
-                Mesh::Sphere => sphere_transforms.push(transform.0),
-                Mesh::Plane => plane_transforms.push(transform.0),
-            }
-        }
-
-        let cube_transform_buffer = self.make_instance_buffer(&cube_transforms);
-        let sphere_transform_buffer = self.make_instance_buffer(&sphere_transforms);
-        let plane_transform_buffer = self.make_instance_buffer(&plane_transforms);
-
         let bias_depth_mvp = bias_matrix * self.shadow_projection * self.shadow_view;
 
         let fill_uniforms = uniform! {
@@ -235,28 +241,21 @@ impl<'a> RenderingSystem<'a> {
         };
 
         target.draw(
-            (&self.cube, cube_transform_buffer.per_instance().unwrap()),
+            (mesh, instances.per_instance().unwrap()),
             &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.instanced_shadow_diffuse_program,
             &fill_uniforms,
             &draw_params,
         ).unwrap();
+    }
 
-        target.draw(
-            (&self.sphere, sphere_transform_buffer.per_instance().unwrap()),
-            &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.instanced_shadow_diffuse_program,
-            &fill_uniforms,
-            &draw_params,
-        ).unwrap();
-
-        target.draw(
-            (&self.plane, plane_transform_buffer.per_instance().unwrap()),
-            &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.instanced_shadow_diffuse_program,
-            &fill_uniforms,
-            &draw_params,
-        ).unwrap();
+    fn draw_instanced_mesh_outline(&self, target: &mut glium::Frame, mesh: &VertexBufferAny, instances: &VertexBufferAny) {
+        let aspect_ratio = {
+            let (width, height) = self.system.display.get_framebuffer_dimensions();
+            width as f32 / height as f32
+        };
+        let projection = Mat4::perspective_rh_gl(3.3141 / 4.0, aspect_ratio, 0.1, 1000.0);
+        let view = self.camera.transform();
 
         let line_uniforms = uniform! {
             projection: projection.to_cols_array_2d(),
@@ -264,42 +263,40 @@ impl<'a> RenderingSystem<'a> {
             paint: [0.0, 0.0, 0.0f32],
         };
 
+        let mut draw_params: glium::draw_parameters::DrawParameters = Default::default();
+        draw_params.depth = glium::Depth {
+            test: glium::draw_parameters::DepthTest::IfLessOrEqual,
+            write: true,
+            ..Default::default()
+        };
+        draw_params.backface_culling = glium::BackfaceCullingMode::CullClockwise;
+        draw_params.blend = glium::Blend::alpha_blending();
+
         draw_params.polygon_mode = PolygonMode::Line;
-
         target.draw(
-            (&self.cube, cube_transform_buffer.per_instance().unwrap()),
+            (mesh, instances.per_instance().unwrap()),
             &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
             &self.instanced_diffuse_program,
             &line_uniforms,
             &draw_params,
         ).unwrap();
-
-        target.draw(
-            (&self.sphere, sphere_transform_buffer.per_instance().unwrap()),
-            &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.instanced_diffuse_program,
-            &line_uniforms,
-            &draw_params,
-        ).unwrap();
-
-        target.draw(
-            (&self.plane, plane_transform_buffer.per_instance().unwrap()),
-            &glium::index::NoIndices(glium::index::PrimitiveType::TrianglesList),
-            &self.instanced_diffuse_program,
-            &line_uniforms,
-            &draw_params,
-        ).unwrap();
-
         draw_params.polygon_mode = PolygonMode::Fill;
     }
 
-    fn make_instance_buffer(&self, instances: &Vec<Mat4>) -> VertexBuffer<Instance> {
+    fn make_instance_buffer(&self, instances: &Vec<Mat4>) -> VertexBufferAny{
+        #[derive(Copy, Clone)]
+        struct Instance {
+            model: [[f32; 4]; 4]
+        }
+
+        implement_vertex!(Instance, model);
+
         let data = instances.iter().map(|model| {
             Instance {
                 model: model.to_cols_array_2d()
             }
         }).collect::<Vec<_>>();
-        glium::vertex::VertexBuffer::dynamic(&self.system.display, &data).unwrap()
+        glium::vertex::VertexBuffer::dynamic(&self.system.display, &data).unwrap().into()
     }
 
     fn draw_debug_shadow_map(&self, target: &mut glium::Frame) {
@@ -366,8 +363,8 @@ impl<'a> System<'a> for RenderingSystem<'_> {
         let mut target = self.system.display.draw();
         target.clear_color_and_depth((0.01, 0.01, 0.01, 1.0), 1.0);
 
-        self.draw_shadow(&transforms, &mesh_renderers);
-        self.draw_geometry(&mut target, &transforms, &mesh_renderers);
+        self.draw_mesh_shadows(&transforms, &mesh_renderers);
+        self.draw_meshes(&mut target, &transforms, &mesh_renderers);
 
         let mut ui = self.system.imgui.frame();
 
@@ -411,13 +408,6 @@ impl<'a> System<'a> for RenderingSystem<'_> {
         println!("Rendering took {}ms", sw.elapsed_ms());
     }
 }
-
-#[derive(Copy, Clone)]
-struct Instance {
-    model: [[f32; 4]; 4]
-}
-
-implement_vertex!(Instance, model);
 
 #[derive(Clone, Copy, Debug)]
 struct DebugVertex {
